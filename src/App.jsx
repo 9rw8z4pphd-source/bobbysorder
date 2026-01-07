@@ -1,284 +1,337 @@
-import { storage } from './firebase.js';
-import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Package, Settings, CheckCircle, Circle, Plus, Trash2, Edit2, Save, X, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, onValue, set } from "firebase/database";
+import {
+  ShoppingCart,
+  History,
+  Settings,
+  Wine,
+  Lock,
+  Plus,
+  Edit3,
+  Trash2,
+  Save,
+  X,
+  Loader2,
+  CheckCircle2,
+  Circle,
+  LogOut,
+  Bell,
+  Calendar
+} from 'lucide-react';
+
+// === FIREBASE CONFIG ===
+const firebaseConfig = {
+  apiKey: "AIzaSyDL7h0nWWE4YV_IMXO7_gupvf1QUZamHGU",
+  authDomain: "bobbys-cafe.firebaseapp.com",
+  databaseURL: "https://bobbys-cafe-default-rtdb.firebaseio.com",
+  projectId: "bobbys-cafe",
+  storageBucket: "bobbys-cafe.firebasestorage.app",
+  messagingSenderId: "605393276080",
+  appId: "1:605393276080:web:e62049aadf7940b5b23f75"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const colors = {
+  primary: '#8E3A3A',    // Warm Terracotta
+  secondary: '#F9F4F0',  // Soft Parchment
+  accent: '#D4AF37',     // Soft Gold
+  background: '#F4EBE2', // Warm Sand
+  textDark: '#432C2C',   // Deep Cocoa
+  success: '#5B8C5A',    // Sage Green
+};
+
+const ADMIN_PIN = "8923";
 
 const CafeOrderingApp = () => {
-  const [view, setView] = useState('supervisor');
+  const [view, setView] = useState('orders');
   const [suppliers, setSuppliers] = useState([]);
   const [orderHistory, setOrderHistory] = useState({});
   const [orderQuantities, setOrderQuantities] = useState({});
-  const [editingSupplier, setEditingSupplier] = useState(null);
-  const [showAddSupplier, setShowAddSupplier] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
-  const [isLoading, setIsLoading] = useState(true);
-
-  // 1. Unified Data Loader with better error handling
-  const loadData = useCallback(async () => {
-    try {
-      const [suppliersRes, historyRes, quantitiesRes] = await Promise.all([
-        storage.get('cafe-suppliers'),
-        storage.get('cafe-order-history'),
-        storage.get('cafe-order-quantities')
-      ]);
-
-      if (suppliersRes?.value) setSuppliers(JSON.parse(suppliersRes.value));
-      if (historyRes?.value) setOrderHistory(JSON.parse(historyRes.value));
-      if (quantitiesRes?.value) setOrderQuantities(JSON.parse(quantitiesRes.value));
-      
-      setLastRefresh(new Date());
-    } catch (error) {
-      console.error('Sync Error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState("");
 
   useEffect(() => {
-    loadData();
-    const refreshInterval = setInterval(loadData, 30000);
-    return () => clearInterval(refreshInterval);
-  }, [loadData]);
+    const dataRef = ref(db, 'cafe_data');
+    return onValue(dataRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      setSuppliers(data.suppliers || []);
+      setOrderHistory(data.history || {});
+      setOrderQuantities(data.quantities || {});
+      setLoading(false);
+    });
+  }, []);
 
-  // 2. Optimized Save Functions
-  const saveSuppliers = async (newSuppliers) => {
-    setSuppliers(newSuppliers); // Optimistic Update
-    await storage.set('cafe-suppliers', JSON.stringify(newSuppliers));
-  };
+  const saveToFirebase = (path, data) => set(ref(db, `cafe_data/${path}`), data);
 
-  const saveOrderHistory = async (newHistory) => {
-    setOrderHistory(newHistory);
-    await storage.set('cafe-order-history', JSON.stringify(newHistory));
-  };
-
-  const saveOrderQuantities = async (newQuantities) => {
-    setOrderQuantities(newQuantities);
-    await storage.set('cafe-order-quantities', JSON.stringify(newQuantities));
-  };
-
-  const getTodayKey = () => {
-    const today = new Date();
-    return `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-  };
-
-  const getDayOfWeek = () => {
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    return days[new Date().getDay()];
-  };
-
-  const toggleOrder = (supplierId) => {
-    const todayKey = getTodayKey();
-    const newHistory = { ...orderHistory };
-    if (!newHistory[todayKey]) newHistory[todayKey] = {};
-    newHistory[todayKey][supplierId] = !newHistory[todayKey][supplierId];
-    saveOrderHistory(newHistory);
-  };
-
-  const updateQuantity = (supplierId, productId, quantity) => {
-    const todayKey = getTodayKey();
-    const newQuantities = { ...orderQuantities };
-    if (!newQuantities[todayKey]) newQuantities[todayKey] = {};
-    if (!newQuantities[todayKey][supplierId]) newQuantities[todayKey][supplierId] = {};
-    newQuantities[todayKey][supplierId][productId] = quantity;
-    saveOrderQuantities(newQuantities);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-amber-50">
-        <Loader2 className="w-10 h-10 animate-spin text-amber-700" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center" style={{ backgroundColor: colors.background }}>
+      <Loader2 className="w-10 h-10 animate-spin" style={{ color: colors.primary }} />
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50">
-      <header className="bg-amber-900 text-white p-4 shadow-lg sticky top-0 z-50">
-        <div className="container mx-auto max-w-5xl flex justify-between items-center">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Package className="w-6 h-6" />
-            Bobby's Cafe
-          </h1>
-          <div className="text-[10px] text-amber-200 uppercase tracking-widest">
-            Sync: {lastRefresh.toLocaleTimeString()}
+    <div className="min-h-screen pb-28" style={{ backgroundColor: colors.background, color: colors.textDark }}>
+      
+      {/* POPPED HEADER */}
+      <header className="sticky top-0 z-50 p-4">
+        <div className="max-w-4xl mx-auto rounded-3xl shadow-2xl p-5 flex items-center justify-between border-b-4" 
+             style={{ backgroundColor: colors.primary, borderColor: colors.accent }}>
+          <div className="flex flex-col">
+            <span className="text-3xl font-serif tracking-widest text-white uppercase leading-none">BOBBY'S</span>
+            <span className="text-[10px] font-bold tracking-[0.4em] text-white/60 mt-1 uppercase">Management</span>
+          </div>
+          <div className="bg-white/10 p-2 rounded-full">
+            <Wine className="w-6 h-6 text-white" />
           </div>
         </div>
-        <nav className="flex gap-2 mt-4 container mx-auto max-w-5xl">
-          {['supervisor', 'manager', 'admin'].map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors ${
-                view === v ? 'bg-white text-amber-900' : 'bg-amber-800 hover:bg-amber-700'
-              }`}
-            >
-              {v === 'supervisor' ? "Today's Orders" : v}
-            </button>
-          ))}
-        </nav>
       </header>
 
-      <main className="container mx-auto p-4 max-w-5xl">
-        {view === 'supervisor' && (
-          <SupervisorView 
-            suppliers={suppliers.filter(s => s.orderDays.includes(getDayOfWeek()))} 
-            toggleOrder={toggleOrder}
-            isOrderCompleted={(id) => orderHistory[getTodayKey()]?.[id] || false}
-            updateQuantity={updateQuantity}
-            getQuantity={(sid, pid) => orderQuantities[getTodayKey()]?.[sid]?.[pid] || ''}
-          />
-        )}
-        {view === 'manager' && <ManagerView suppliers={suppliers} orderHistory={orderHistory} orderQuantities={orderQuantities} />}
+      <main className="max-w-2xl mx-auto p-4">
+        {view === 'orders' && <OrdersView suppliers={suppliers} history={orderHistory} quantities={orderQuantities} onSave={saveToFirebase} />}
+        {view === 'history' && <HistoryView suppliers={suppliers} history={orderHistory} quantities={orderQuantities} />}
         {view === 'admin' && (
-          <AdminView 
-            suppliers={suppliers}
-            addSupplier={(s) => {
-              saveSuppliers([...suppliers, { ...s, id: Date.now().toString() }]);
-              setShowAddSupplier(false);
-            }}
-            updateSupplier={(s) => {
-              saveSuppliers(suppliers.map(orig => orig.id === s.id ? s : orig));
-              setEditingSupplier(null);
-            }}
-            deleteSupplier={(id) => {
-              if (window.confirm('Delete this supplier?')) {
-                saveSuppliers(suppliers.filter(s => s.id !== id));
-              }
-            }}
-            editingSupplier={editingSupplier}
-            setEditingSupplier={setEditingSupplier}
-            showAddSupplier={showAddSupplier}
-            setShowAddSupplier={setShowAddSupplier}
-          />
+          !isAdminAuthenticated ? (
+            <PinPad pinInput={pinInput} setPinInput={setPinInput} onAuth={() => setIsAdminAuthenticated(true)} />
+          ) : (
+            <div className="animate-in slide-in-from-bottom-4">
+                <div className="flex justify-between items-center mb-6 px-2">
+                    <h2 className="text-xl font-serif">Suppliers List</h2>
+                    <button onClick={() => setIsAdminAuthenticated(false)} className="px-4 py-2 rounded-full bg-white text-xs font-bold text-red-500 shadow-sm">Logout</button>
+                </div>
+                <AdminView suppliers={suppliers} onSave={(newList) => saveToFirebase('suppliers', newList)} />
+            </div>
+          )
         )}
       </main>
+
+      {/* FLOATING NAV */}
+      <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-md z-50">
+        <div className="rounded-full shadow-2xl border-2 p-2 flex justify-around items-center backdrop-blur-md" 
+             style={{ backgroundColor: 'rgba(255, 255, 255, 0.8)', borderColor: colors.accent }}>
+          <NavButton icon={ShoppingCart} active={view === 'orders'} onClick={() => setView('orders')} />
+          <NavButton icon={History} active={view === 'history'} onClick={() => setView('history')} />
+          <NavButton icon={Settings} active={view === 'admin'} onClick={() => setView('admin')} />
+        </div>
+      </nav>
     </div>
   );
 };
 
-// ... [Keep your SupervisorView and ManagerView components as they are, or paste them below]
-// NOTE: Ensure AdminView uses the updated SupplierForm logic below.
+// --- SUB-COMPONENTS ---
 
-const AdminView = ({ suppliers, addSupplier, updateSupplier, deleteSupplier, editingSupplier, setEditingSupplier, showAddSupplier, setShowAddSupplier }) => {
+const NavButton = ({ icon: Icon, active, onClick }) => (
+  <button onClick={onClick} className={`p-4 rounded-full transition-all duration-500 ${active ? 'shadow-inner' : ''}`}
+          style={{ backgroundColor: active ? colors.primary : 'transparent', color: active ? '#fff' : colors.primary }}>
+    <Icon className="w-6 h-6" />
+  </button>
+);
+
+const OrdersView = ({ suppliers, history, quantities, onSave }) => {
+  const todayKey = `${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}`;
+  const dayName = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()];
+  const todaysSuppliers = suppliers.filter(s => s.days?.includes(dayName));
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Suppliers</h2>
-        <button
-          onClick={() => setShowAddSupplier(true)}
-          className="bg-amber-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-700"
-          disabled={suppliers.length >= 10}
-        >
-          <Plus className="w-5 h-5" /> Add New
-        </button>
-      </div>
-
-      {(showAddSupplier || editingSupplier) && (
-        <SupplierForm
-          supplier={editingSupplier}
-          onSave={editingSupplier ? updateSupplier : addSupplier}
-          onCancel={() => { setShowAddSupplier(false); setEditingSupplier(null); }}
-        />
-      )}
-
-      <div className="grid gap-4">
-        {suppliers.map(s => (
-          <div key={s.id} className="bg-white p-4 rounded-xl shadow-sm border border-amber-100 flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-lg">{s.name}</h3>
-              <p className="text-sm text-gray-500">{s.products.length} items • {s.orderDays.join(', ')}</p>
+      {todaysSuppliers.map(s => {
+        const isCompleted = history[todayKey]?.[s.id];
+        return (
+          <div key={s.id} className="rounded-[40px] shadow-xl border-t-8 bg-white p-6 overflow-hidden transition-all" 
+               style={{ borderColor: isCompleted ? colors.success : colors.primary }}>
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-2xl font-serif text-stone-800">{s.name}</h3>
+                <span className="text-[10px] font-black uppercase tracking-widest text-stone-400">Order for {dayName}</span>
+              </div>
+              <button onClick={() => {
+                const newHistory = { ...history };
+                if (!newHistory[todayKey]) newHistory[todayKey] = {};
+                newHistory[todayKey][s.id] = !newHistory[todayKey][s.id];
+                onSave('history', newHistory);
+              }} className="p-3 rounded-full shadow-lg" style={{ backgroundColor: isCompleted ? colors.success : colors.background }}>
+                <CheckCircle2 className={`w-6 h-6 ${isCompleted ? 'text-white' : 'text-stone-300'}`} />
+              </button>
             </div>
-            <div className="flex gap-1">
-              <button onClick={() => setEditingSupplier(s)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit2 className="w-5 h-5" /></button>
-              <button onClick={() => deleteSupplier(s.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-5 h-5" /></button>
+            <div className="space-y-4">
+              {s.items?.map(item => (
+                <div key={item.id} className="flex items-center justify-between p-4 rounded-3xl bg-stone-50 border border-stone-100">
+                  <span className="font-bold text-sm text-stone-600 uppercase">{item.name}</span>
+                  <input type="number" placeholder="0" className="w-20 p-3 rounded-full border-none bg-white shadow-inner text-center font-bold text-lg outline-none focus:ring-2 focus:ring-amber-500"
+                    value={quantities[todayKey]?.[s.id]?.[item.id] || ''} 
+                    onChange={(e) => {
+                      const newQ = { ...quantities };
+                      if (!newQ[todayKey]) newQ[todayKey] = {};
+                      if (!newQ[todayKey][s.id]) newQ[todayKey][s.id] = {};
+                      newQ[todayKey][s.id][item.id] = e.target.value;
+                      onSave('quantities', newQ);
+                    }} 
+                  />
+                </div>
+              ))}
             </div>
           </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const HistoryView = ({ suppliers, history, quantities }) => {
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    return { key: `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`, label: d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }) };
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-[30px] bg-white p-6 shadow-xl">
+        <h2 className="text-center font-serif text-lg mb-4">Weekly Compliance</h2>
+        <div className="flex justify-between">
+          {days.reverse().map(d => {
+            const completedCount = Object.values(history[d.key] || {}).filter(v => v).length;
+            return (
+              <div key={d.key} className="flex flex-col items-center gap-2">
+                <div className="w-8 h-20 bg-stone-100 rounded-full relative overflow-hidden">
+                  <div className="absolute bottom-0 w-full rounded-full transition-all duration-1000" 
+                       style={{ height: `${completedCount * 33}%`, backgroundColor: colors.primary }}></div>
+                </div>
+                <span className="text-[10px] font-bold text-stone-400">{d.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="font-serif text-xl px-2">Recent Order Logs</h3>
+        {days.reverse().map(d => {
+            const dayData = quantities[d.key];
+            if (!dayData) return null;
+            return (
+                <div key={d.key} className="p-5 rounded-3xl bg-white/50 border border-stone-200">
+                    <div className="flex items-center gap-2 mb-3">
+                        <Calendar className="w-4 h-4 text-stone-400" />
+                        <span className="font-bold text-xs uppercase">{d.label}</span>
+                    </div>
+                    {Object.entries(dayData).map(([sId, items]) => {
+                        const sName = suppliers.find(s => s.id === sId)?.name || 'Supplier';
+                        return (
+                            <div key={sId} className="mb-2">
+                                <p className="text-[10px] font-black text-amber-600 uppercase mb-1">{sName}</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(items).map(([itemId, qty]) => {
+                                        const itemName = suppliers.find(s => s.id === sId)?.items.find(i => i.id.toString() === itemId)?.name || 'Item';
+                                        return <span key={itemId} className="px-3 py-1 bg-white rounded-full text-[10px] font-bold shadow-sm">{itemName}: {qty}</span>
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const PinPad = ({ pinInput, setPinInput, onAuth }) => {
+  const handleDigit = (d) => {
+    const next = pinInput + d;
+    if (next.length <= 4) {
+      setPinInput(next);
+      if (next === ADMIN_PIN) { onAuth(); setPinInput(""); }
+    }
+  };
+  return (
+    <div className="flex flex-col items-center py-10">
+      <div className="flex gap-4 mb-12">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className={`w-5 h-5 rounded-full border-2 transition-all ${pinInput.length > i ? 'bg-amber-600 border-amber-600 scale-125' : 'border-stone-300'}`} />
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, "C", 0, "⌫"].map(btn => (
+          <button key={btn} onClick={() => {
+            if (btn === "C") setPinInput("");
+            else if (btn === "⌫") setPinInput(pinInput.slice(0, -1));
+            else handleDigit(btn);
+          }} className="w-20 h-20 rounded-full bg-white shadow-xl text-2xl font-bold active:scale-90 transition-transform">{btn}</button>
         ))}
       </div>
     </div>
   );
 };
 
-const SupplierForm = ({ supplier, onSave, onCancel }) => {
-  const [name, setName] = useState(supplier?.name || '');
-  const [products, setProducts] = useState(supplier?.products || [{ id: Date.now().toString(), name: '', parLevel: '' }]);
-  const [orderDays, setOrderDays] = useState(supplier?.orderDays || []);
-
-  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-  const handleSubmit = () => {
-    const validProducts = products.filter(p => p.name.trim() && p.parLevel);
-    if (!name.trim() || validProducts.length === 0 || orderDays.length === 0) {
-      alert('Required: Name, 1+ Product with Par, and Order Days');
-      return;
-    }
-    onSave({ ...supplier, name: name.trim(), products: validProducts, orderDays });
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-xl p-6 border-2 border-amber-500 animate-in fade-in zoom-in duration-200">
+const AdminView = ({ suppliers, onSave }) => {
+    const [mode, setMode] = useState('list');
+    const [formData, setFormData] = useState(null);
+  
+    const startEdit = (supplier) => {
+      setFormData(supplier ? { ...supplier } : { id: Date.now().toString(), name: '', days: [], items: [] });
+      setMode('form');
+    };
+  
+    if (mode === 'form') return <SupplierForm initialData={formData} onSave={(data) => {
+      const newList = !suppliers.find(s => s.id === data.id) ? [...suppliers, data] : suppliers.map(s => s.id === data.id ? data : s);
+      onSave(newList); setMode('list');
+    }} onCancel={() => setMode('list')} />;
+  
+    return (
       <div className="space-y-4">
-        <input 
-          className="w-full text-xl font-bold border-b-2 border-gray-100 focus:border-amber-500 outline-none pb-2"
-          placeholder="Supplier Name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-        />
-        
-        <div>
-          <label className="text-sm font-semibold text-gray-500 uppercase">Order Days</label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {days.map(d => (
-              <button 
-                key={d}
-                onClick={() => setOrderDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${orderDays.includes(d) ? 'bg-amber-600 text-white' : 'bg-gray-100 text-gray-400'}`}
-              >
-                {d.slice(0,3).toUpperCase()}
-              </button>
-            ))}
+        {suppliers.map(s => (
+          <div key={s.id} className="p-6 rounded-[30px] bg-white flex justify-between items-center shadow-lg border border-stone-100">
+            <span className="font-serif text-lg">{s.name}</span>
+            <div className="flex gap-2">
+              <button onClick={() => startEdit(s)} className="p-3 bg-stone-50 rounded-full text-stone-400"><Edit3 className="w-5 h-5" /></button>
+              <button onClick={() => window.confirm("Delete?") && onSave(suppliers.filter(x => x.id !== s.id))} className="p-3 bg-stone-50 rounded-full text-red-300"><Trash2 className="w-5 h-5" /></button>
+            </div>
           </div>
-        </div>
+        ))}
+        <button onClick={() => startEdit(null)} className="w-full p-6 rounded-[30px] border-4 border-dashed border-stone-200 text-stone-300 flex justify-center hover:bg-white transition-all"><Plus className="w-8 h-8" /></button>
+      </div>
+    );
+};
 
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-500 uppercase">Products & Par Levels</label>
-          {products.map((p, idx) => (
-            <div key={p.id} className="flex gap-2">
-              <input 
-                className="flex-1 p-2 bg-gray-50 rounded-lg" 
-                placeholder="Item Name" 
-                value={p.name}
-                onChange={e => {
-                  const newP = [...products];
-                  newP[idx].name = e.target.value;
-                  setProducts(newP);
-                }}
-              />
-              <input 
-                className="w-20 p-2 bg-gray-50 rounded-lg" 
-                type="number" 
-                placeholder="Par" 
-                value={p.parLevel}
-                onChange={e => {
-                  const newP = [...products];
-                  newP[idx].parLevel = e.target.value;
-                  setProducts(newP);
-                }}
-              />
-              <button onClick={() => setProducts(products.filter((_, i) => i !== idx))} className="text-red-400"><X className="w-5 h-5"/></button>
+const SupplierForm = ({ initialData, onSave, onCancel }) => {
+    const [data, setData] = useState(initialData);
+    const addItem = () => setData({ ...data, items: [...(data.items || []), { id: Date.now(), name: '', par: '' }] });
+  
+    return (
+      <div className="bg-white rounded-[40px] shadow-2xl p-8 animate-in slide-in-from-bottom-12">
+        <div className="flex justify-between items-center mb-8">
+          <h3 className="font-serif text-2xl">Supplier Profile</h3>
+          <X onClick={onCancel} className="w-6 h-6 text-stone-300 cursor-pointer" />
+        </div>
+        <input className="w-full p-5 rounded-3xl bg-stone-50 text-xl mb-6 outline-none focus:ring-2 focus:ring-amber-500" placeholder="Name" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+        <div className="flex flex-wrap gap-2 mb-8">
+          {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+            <button key={day} onClick={() => {
+              const days = data.days?.includes(day) ? data.days.filter(d => d !== day) : [...(data.days || []), day];
+              setData({...data, days});
+            }} className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all ${data.days?.includes(day) ? 'bg-stone-800 text-white border-stone-800' : 'bg-white text-stone-300 border-stone-200'}`}>{day.slice(0,3)}</button>
+          ))}
+        </div>
+        <div className="space-y-3 mb-8">
+          {data.items?.map((item, i) => (
+            <div key={i} className="flex gap-2">
+              <input className="flex-1 p-4 rounded-2xl bg-stone-50 text-xs font-bold outline-none" placeholder="Item" value={item.name} onChange={e => {
+                const items = [...data.items]; items[i].name = e.target.value; setData({...data, items});
+              }} />
+              <input className="w-20 p-4 rounded-2xl bg-stone-50 text-xs text-center font-bold outline-none" placeholder="Par" value={item.par} onChange={e => {
+                const items = [...data.items]; items[i].par = e.target.value; setData({...data, items});
+              }} />
             </div>
           ))}
-          <button onClick={() => setProducts([...products, { id: Date.now().toString(), name: '', parLevel: '' }])} className="text-amber-600 text-sm font-bold">+ Add Item</button>
+          <button onClick={addItem} className="text-xs font-black uppercase tracking-widest text-amber-600">+ Add Product</button>
         </div>
-
-        <div className="flex gap-3 pt-4">
-          <button onClick={handleSubmit} className="flex-1 bg-amber-600 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2">
-            <Save className="w-5 h-5"/> Save Changes
-          </button>
-          <button onClick={onCancel} className="px-6 py-3 bg-gray-100 text-gray-500 rounded-lg font-bold">Cancel</button>
-        </div>
+        <button onClick={() => onSave(data)} className="w-full py-5 bg-stone-900 text-white rounded-full font-black uppercase tracking-widest shadow-2xl active:scale-95">Save Supplier</button>
       </div>
-    </div>
-  );
+    );
 };
 
 export default CafeOrderingApp;
