@@ -1,3 +1,4 @@
+import { storage } from './firebase.js';
 import React, { useState, useEffect } from 'react';
 import { Calendar, Package, Settings, CheckCircle, Circle, Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 
