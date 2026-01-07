@@ -25,9 +25,9 @@ const CafeOrderingApp = () => {
 
   const loadData = async () => {
     try {
-      const suppliersResult = await window.storage.get('cafe-suppliers');
-      const historyResult = await window.storage.get('cafe-order-history');
-      const quantitiesResult = await window.storage.get('cafe-order-quantities');
+      const suppliersResult = await storage.get('cafe-suppliers');
+      const historyResult = await storage.get('cafe-order-history');
+      const quantitiesResult = await storage.get('cafe-order-quantities');
       
       if (suppliersResult) {
         setSuppliers(JSON.parse(suppliersResult.value));
@@ -47,7 +47,7 @@ const CafeOrderingApp = () => {
 
   const saveSuppliers = async (newSuppliers) => {
     try {
-      await window.storage.set('cafe-suppliers', JSON.stringify(newSuppliers));
+      await storage.set('cafe-suppliers', JSON.stringify(newSuppliers));
       setSuppliers(newSuppliers);
     } catch (error) {
       console.error('Error saving suppliers:', error);
@@ -56,7 +56,7 @@ const CafeOrderingApp = () => {
 
   const saveOrderHistory = async (newHistory) => {
     try {
-      await window.storage.set('cafe-order-history', JSON.stringify(newHistory));
+      await storage.set('cafe-order-history', JSON.stringify(newHistory));
       setOrderHistory(newHistory);
     } catch (error) {
       console.error('Error saving order history:', error);
@@ -65,7 +65,7 @@ const CafeOrderingApp = () => {
 
   const saveOrderQuantities = async (newQuantities) => {
     try {
-      await window.storage.set('cafe-order-quantities', JSON.stringify(newQuantities));
+      await storage.set('cafe-order-quantities', JSON.stringify(newQuantities));
       setOrderQuantities(newQuantities);
     } catch (error) {
       console.error('Error saving quantities:', error);
